@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gemini Nano チャット</title>
+  <style>
+    :root {
+      --bg: #0f0f1a;
+      --surface: #1a1a2e;
+      --surface2: #16213e;
+      --accent: #7c6af7;
+      --accent2: #a78bfa;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --user-bubble: #312e81;
+      --ai-bubble: #1e293b;
+      --border: #334155;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+
+    .header-info h1 {
+      font-size: 18px; font-weight: 700;
+      background: linear-gradient(90deg, var(--accent2), #c4b5fd);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    .header-info p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .status-badge {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 6px 14px; font-size: 13px;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-muted); transition: background 0.3s;
+    }
+    .status-dot.checking { background: var(--warning); animation: pulse 1s infinite; }
+    .status-dot.ready    { background: var(--success); }
+    .status-dot.error    { background: var(--error); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Chat area ── */
+    #chat-container {
+      flex: 1; overflow-y: auto; padding: 24px;
+      display: flex; flex-direction: column; gap: 20px;
+      scroll-behavior: smooth;
+    }
+
+    #chat-container::-webkit-scrollbar { width: 6px; }
+    #chat-container::-webkit-scrollbar-track { background: transparent; }
+    #chat-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .message {
+      display: flex; gap: 12px; max-width: 820px;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+    .message.user { margin-left: auto; flex-direction: row-reverse; }
+
+    .avatar {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0; align-self: flex-start;
+    }
+    .message.user .avatar { background: linear-gradient(135deg, var(--accent), #6d28d9); }
+    .message.ai   .avatar { background: linear-gradient(135deg, #0f766e, #0891b2); }
+
+    .bubble {
+      padding: 12px 16px; border-radius: 16px;
+      line-height: 1.65; font-size: 14.5px;
+      max-width: 100%; word-break: break-word;
+    }
+    .message.user .bubble {
+      background: var(--user-bubble); border-top-right-radius: 4px; color: #e0e7ff;
+    }
+    .message.ai .bubble {
+      background: var(--ai-bubble); border-top-left-radius: 4px; border: 1px solid var(--border);
+    }
+
+    .bubble pre {
+      background: #0f172a; border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0; font-size: 13px;
+    }
+    .bubble code { font-family: 'Cascadia Code','Fira Code',monospace; }
+
+    /* ── Attached image in bubble ── */
+    .bubble .attached-img {
+      display: block; max-width: 320px; max-height: 240px;
+      border-radius: 10px; margin-bottom: 8px;
+      border: 1px solid var(--border); object-fit: cover;
+    }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: flex; gap: 5px; padding: 14px 16px;
+      background: var(--ai-bubble); border: 1px solid var(--border);
+      border-radius: 16px; border-top-left-radius: 4px; width: fit-content;
+    }
+    .typing-indicator span {
+      width: 8px; height: 8px; background: var(--text-muted);
+      border-radius: 50%; animation: bounce 1.2s infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: .2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+    /* ── Input area ── */
+    #input-area {
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 12px 24px 16px; flex-shrink: 0;
+    }
+
+    /* Preview strip */
+    #preview-strip {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 8px; display: none;
+    }
+
+    .preview-item {
+      position: relative; width: 72px; height: 72px;
+      border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--border); flex-shrink: 0;
+    }
+
+    .preview-item img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+
+    /* File chip (for text/code files) */
+    .preview-item.file-chip {
+      width: auto; height: auto; min-width: 72px;
+      padding: 6px 10px;
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surface2);
+    }
+
+    .preview-item.file-chip .file-icon { font-size: 18px; flex-shrink: 0; }
+    .preview-item.file-chip .file-name {
+      font-size: 12px; color: var(--text); max-width: 120px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    .preview-item .remove-btn {
+      position: absolute; top: 3px; right: 3px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: rgba(0,0,0,.7); color: #fff;
+      border: none; cursor: pointer; font-size: 11px;
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+
+    .preview-item.file-chip .remove-btn {
+      position: static; background: transparent; color: var(--text-muted);
+      font-size: 14px; flex-shrink: 0;
+    }
+    .preview-item.file-chip .remove-btn:hover { color: var(--error); }
+
+    .input-wrapper {
+      display: flex; gap: 10px; align-items: flex-end;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 10px 14px; transition: border-color .2s;
+    }
+    .input-wrapper:focus-within { border-color: var(--accent); }
+
+    /* Attach button */
+    #attach-btn {
+      width: 34px; height: 34px; border-radius: 9px; border: none;
+      background: var(--surface); color: var(--text-muted);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background .2s, color .2s;
+    }
+    #attach-btn:hover { background: var(--border); color: var(--text); }
+    #attach-btn svg { width: 18px; height: 18px; }
+
+    #user-input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-size: 14.5px; font-family: inherit;
+      resize: none; max-height: 160px; line-height: 1.5;
+    }
+    #user-input::placeholder { color: var(--text-muted); }
+
+    #send-btn {
+      width: 38px; height: 38px; border-radius: 10px; border: none;
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      color: white; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: opacity .2s, transform .1s;
+    }
+    #send-btn:hover:not(:disabled) { opacity: .85; }
+    #send-btn:active:not(:disabled) { transform: scale(.93); }
+    #send-btn:disabled { opacity: .4; cursor: not-allowed; }
+    #send-btn svg { width: 18px; height: 18px; }
+
+    .hint { font-size: 11.5px; color: var(--text-muted); margin-top: 8px; text-align: center; }
+
+    /* Drag-over overlay */
+    body.drag-over::after {
+      content: '📎 ここにドロップ';
+      position: fixed; inset: 0;
+      background: rgba(124,106,247,.18);
+      border: 3px dashed var(--accent);
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 700; color: var(--accent2);
+      pointer-events: none; z-index: 999;
+    }
+
+    /* ── Info card ── */
+    .info-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px 24px;
+      max-width: 600px; margin: auto; text-align: center;
+    }
+    .info-card .emoji { font-size: 40px; margin-bottom: 12px; }
+    .info-card h2 { font-size: 18px; margin-bottom: 8px; }
+    .info-card p { font-size: 13.5px; color: var(--text-muted); line-height: 1.7; }
+    .info-card ul { text-align: left; margin: 12px 0 0 20px; font-size: 13px; color: var(--text-muted); line-height: 1.9; }
+
+    .btn-primary {
+      display: inline-block; margin-top: 16px; padding: 10px 22px;
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      color: white; border: none; border-radius: 10px;
+      font-size: 14px; cursor: pointer; text-decoration: none; transition: opacity .2s;
+    }
+    .btn-primary:hover { opacity: .85; }
+
+    @media (max-width: 600px) {
+      header { padding: 10px 16px; }
+      #chat-container { padding: 16px; }
+      #input-area { padding: 10px 16px 14px; }
+      .status-badge span { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">✨</div>
+  <div class="header-info">
+    <h1>Gemini Nano Chat</h1>
+    <p>Chrome Built-in AI · ローカル実行 · プライバシー保護</p>
+  </div>
+  <div class="status-badge">
+    <div class="status-dot checking" id="status-dot"></div>
+    <span id="status-text">確認中…</span>
+  </div>
+  <button id="reset-btn" title="会話をリセット（メモリ解放）" style="
+    margin-left:10px; padding:6px 14px; border-radius:20px; border:1px solid var(--border);
+    background:var(--surface2); color:var(--text-muted); font-size:12px; cursor:pointer;
+    display:none; transition:background .2s, color .2s;
+  ">🔄 リセット</button>
+</header>
+
+<div id="chat-container">
+  <div id="init-card" class="info-card">
+    <div class="emoji">🔍</div>
+    <h2>Gemini Nano を確認中…</h2>
+    <p>Chrome の Built-in AI API を検出しています。<br>しばらくお待ちください。</p>
+  </div>
+</div>
+
+<div id="input-area">
+  <!-- Image preview strip -->
+  <div id="preview-strip"></div>
+
+  <div class="input-wrapper">
+    <!-- Attach button -->
+    <button id="attach-btn" title="画像・テキスト・コードファイルを添付">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+      </svg>
+    </button>
+
+    <textarea
+      id="user-input"
+      rows="1"
+    placeholder="メッセージを入力… 画像・コードファイルも添付できます (Shift+Enter で改行)"
+      disabled
+    ></textarea>
+
+    <button id="send-btn" disabled title="送信">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+  <p class="hint">📎 クリックまたはドラッグ＆ドロップで画像添付 · Enter で送信 · Gemini Nano はデバイス上でローカル実行</p>
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="file-input" accept="image/*" multiple style="display:none">
+<input type="file" id="text-file-input" accept=".txt,.md,.py,.js,.ts,.jsx,.tsx,.html,.css,.json,.yaml,.yml,.xml,.csv,.java,.c,.cpp,.h,.hpp,.cs,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt,.dart,.vue,.svelte" multiple style="display:none">
+
+<script>
+// ─────────────────────────────────────────────
+//  Utilities
+// ─────────────────────────────────────────────
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function formatMessage(text) {
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+    `<pre><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`
+  );
+  text = text.replace(/`([^`]+)`/g, (_, c) => `<code>${escapeHtml(c)}</code>`);
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  text = text.replace(/\n/g, '<br>');
+  return text;
+}
+
+// Convert File → { dataUrl, blob }
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// dataURL → Blob
+function dataUrlToBlob(dataUrl) {
+  const [header, data] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)[1];
+  const binary = atob(data);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+// ─────────────────────────────────────────────
+//  DOM refs
+// ─────────────────────────────────────────────
+const chatContainer = document.getElementById('chat-container');
+const userInput     = document.getElementById('user-input');
+const sendBtn       = document.getElementById('send-btn');
+const statusDot     = document.getElementById('status-dot');
+const statusText    = document.getElementById('status-text');
+const initCard      = document.getElementById('init-card');
+const attachBtn      = document.getElementById('attach-btn');
+const fileInput      = document.getElementById('file-input');
+const textFileInput  = document.getElementById('text-file-input');
+const previewStrip   = document.getElementById('preview-strip');
+
+let session = null;
+let supportsImages = false;
+
+// Pending image attachments: [{ dataUrl, file }]
+let pendingImages = [];
+// Pending text/code file attachments: [{ name, content, lang }]
+let pendingTextFiles = [];
+
+// ─────────────────────────────────────────────
+//  Status
+// ─────────────────────────────────────────────
+function setStatus(state, text) {
+  statusDot.className = 'status-dot ' + state;
+  statusText.textContent = text;
+}
+
+// ─────────────────────────────────────────────
+//  Setup guide
+// ─────────────────────────────────────────────
+function showSetupGuide(reason) {
+  setStatus('error', '利用不可');
+  initCard.innerHTML = `
+    <div class="emoji">⚙️</div>
+    <h2>セットアップが必要です</h2>
+    <p>${reason}</p>
+    <p style="margin-top:12px">以下の手順で有効化してください：</p>
+    <ul>
+      <li><code>chrome://flags/#prompt-api-for-gemini-nano</code> → <strong>Enabled</strong></li>
+      <li>画像対応：<code>chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code> → <strong>Enabled</strong></li>
+      <li>Chrome を再起動してリロード</li>
+    </ul>
+    <button class="btn-primary" onclick="location.reload()">🔄 再確認する</button>
+  `;
+}
+
+// ─────────────────────────────────────────────
+//  Init session
+// ─────────────────────────────────────────────
+async function initSession() {
+  setStatus('checking', 'モデル確認中…');
+
+  if (typeof window.LanguageModel === 'undefined') {
+    showSetupGuide('Chrome の Built-in AI API (<code>window.LanguageModel</code>) が見つかりません。');
+    return;
+  }
+
+  try {
+    const avail = await LanguageModel.availability();
+
+    if (avail === 'unavailable') {
+      showSetupGuide(
+        'Gemini Nano が利用できません。<br>' +
+        '① ストレージ空き容量（約20GB必要）を確認<br>' +
+        '② <code>chrome://flags/#prompt-api-for-gemini-nano</code> を Enabled に<br>' +
+        '③ <code>chrome://on-device-internals</code> でモデル状態を確認'
+      );
+      return;
+    }
+
+    if (avail === 'downloadable' || avail === 'downloading') {
+      setStatus('checking', 'ダウンロード中…');
+      initCard.innerHTML = `
+        <div class="emoji">⬇️</div>
+        <h2>モデルをダウンロード中…</h2>
+        <p>完了後、自動的にチャットが開始されます。</p>
+      `;
+    }
+
+    // Try multimodal first
+    try {
+      session = await LanguageModel.create({
+        systemPrompt: 'あなたは親切で知識豊富なアシスタントです。日本語で丁寧に回答してください。画像が添付された場合はその内容も踏まえて回答してください。',
+        expectedInputs: [{ type: 'image' }],
+        monitor(m) {
+          m.addEventListener('downloadprogress', e => {
+            const pct = e.total ? Math.round(e.loaded / e.total * 100) : '?';
+            setStatus('checking', `ダウンロード ${pct}%`);
+          });
+        }
+      });
+      supportsImages = true;
+    } catch (_) {
+      // Fallback: text-only
+      session = await LanguageModel.create({
+        systemPrompt: 'あなたは親切で知識豊富なアシスタントです。日本語で丁寧に回答してください。',
+        monitor(m) {
+          m.addEventListener('downloadprogress', e => {
+            const pct = e.total ? Math.round(e.loaded / e.total * 100) : '?';
+            setStatus('checking', `ダウンロード ${pct}%`);
+          });
+        }
+      });
+      supportsImages = false;
+    }
+
+    setStatus('ready', supportsImages ? 'Gemini Nano（画像対応）' : 'Gemini Nano 準備完了');
+    initCard.remove();
+    addWelcomeMessage();
+    enableInput();
+    resetBtn.style.display = 'block';
+
+  } catch (err) {
+    console.error(err);
+    showSetupGuide(`セッションの作成に失敗しました：<br><code>${escapeHtml(err.message)}</code>`);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  Welcome
+// ─────────────────────────────────────────────
+function addWelcomeMessage() {
+  const imgNote = supportsImages
+    ? '\n\n📎 画像も添付できます。教科書の写真や問題を送ってみてください！'
+    : '';
+  addMessage('ai', `こんにちは！ **Gemini Nano** です 👋\n\nデバイス上でローカルに動作しています。何でもお気軽にどうぞ！${imgNote}`);
+}
+
+function enableInput() {
+  userInput.disabled = false;
+  sendBtn.disabled   = false;
+  userInput.focus();
+  if (!supportsImages) {
+    attachBtn.disabled = true;
+    attachBtn.title = '画像対応フラグが無効です';
+    attachBtn.style.opacity = '0.3';
+  }
+}
+
+// ─────────────────────────────────────────────
+//  Message bubble
+// ─────────────────────────────────────────────
+function addMessage(role, text, imageDataUrls = []) {
+  const wrap = document.createElement('div');
+  wrap.className = `message ${role}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = role === 'user' ? '🧑' : '✨';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+
+  // Show attached images
+  imageDataUrls.forEach(src => {
+    const img = document.createElement('img');
+    img.className = 'attached-img';
+    img.src = src;
+    bubble.appendChild(img);
+  });
+
+  const textNode = document.createElement('span');
+  textNode.innerHTML = formatMessage(text);
+  bubble.appendChild(textNode);
+
+  wrap.appendChild(avatar);
+  wrap.appendChild(bubble);
+  chatContainer.appendChild(wrap);
+  scrollToBottom();
+  return textNode; // return text span for streaming updates
+}
+
+// ─────────────────────────────────────────────
+//  Typing indicator
+// ─────────────────────────────────────────────
+function addTypingIndicator() {
+  const wrap = document.createElement('div');
+  wrap.className = 'message ai';
+  wrap.id = 'typing-wrap';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = '✨';
+
+  const ind = document.createElement('div');
+  ind.className = 'typing-indicator';
+  ind.innerHTML = '<span></span><span></span><span></span>';
+
+  wrap.appendChild(avatar);
+  wrap.appendChild(ind);
+  chatContainer.appendChild(wrap);
+  scrollToBottom();
+}
+
+function removeTypingIndicator() {
+  const el = document.getElementById('typing-wrap');
+  if (el) el.remove();
+}
+
+function scrollToBottom() {
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// ─────────────────────────────────────────────
+//  File extension → language hint
+// ─────────────────────────────────────────────
+function extToLang(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  const map = {
+    py:'python', js:'javascript', ts:'typescript', jsx:'jsx', tsx:'tsx',
+    html:'html', css:'css', json:'json', yaml:'yaml', yml:'yaml',
+    java:'java', c:'c', cpp:'cpp', h:'c', hpp:'cpp', cs:'csharp',
+    go:'go', rs:'rust', rb:'ruby', php:'php', sh:'bash', bat:'batch',
+    ps1:'powershell', sql:'sql', r:'r', swift:'swift', kt:'kotlin',
+    dart:'dart', vue:'vue', svelte:'svelte', md:'markdown', txt:'text',
+    xml:'xml', csv:'csv'
+  };
+  return map[ext] || ext;
+}
+
+function extToIcon(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  const map = {
+    py:'🐍', js:'🟨', ts:'🔷', jsx:'⚛️', tsx:'⚛️',
+    html:'🌐', css:'🎨', json:'📋', yaml:'📋', yml:'📋',
+    java:'☕', c:'⚙️', cpp:'⚙️', h:'⚙️', hpp:'⚙️', cs:'🔵',
+    go:'🐹', rs:'🦀', rb:'💎', php:'🐘', sh:'🖥️', bat:'🖥️',
+    ps1:'🖥️', sql:'🗄️', r:'📊', swift:'🍎', kt:'🟣',
+    dart:'🎯', vue:'💚', svelte:'🔶', md:'📝', txt:'📄',
+    xml:'📄', csv:'📊'
+  };
+  return map[ext] || '📄';
+}
+
+// ─────────────────────────────────────────────
+//  Preview strip helpers
+// ─────────────────────────────────────────────
+function checkPreviewVisible() {
+  if (pendingImages.length === 0 && pendingTextFiles.length === 0) {
+    previewStrip.style.display = 'none';
+  } else {
+    previewStrip.style.display = 'flex';
+  }
+}
+
+function addImageToPreview(dataUrl, file) {
+  pendingImages.push({ dataUrl, file });
+
+  const item = document.createElement('div');
+  item.className = 'preview-item';
+
+  const img = document.createElement('img');
+  img.src = dataUrl;
+
+  const btn = document.createElement('button');
+  btn.className = 'remove-btn';
+  btn.textContent = '×';
+  btn.onclick = () => {
+    const idx = pendingImages.findIndex(p => p.dataUrl === dataUrl);
+    if (idx !== -1) pendingImages.splice(idx, 1);
+    item.remove();
+    checkPreviewVisible();
+  };
+
+  item.appendChild(img);
+  item.appendChild(btn);
+  previewStrip.appendChild(item);
+  previewStrip.style.display = 'flex';
+}
+
+function addTextFileToPreview(name, content, lang) {
+  pendingTextFiles.push({ name, content, lang });
+
+  const item = document.createElement('div');
+  item.className = 'preview-item file-chip';
+
+  const icon = document.createElement('span');
+  icon.className = 'file-icon';
+  icon.textContent = extToIcon(name);
+
+  const label = document.createElement('span');
+  label.className = 'file-name';
+  label.textContent = name;
+  label.title = name;
+
+  const btn = document.createElement('button');
+  btn.className = 'remove-btn';
+  btn.textContent = '×';
+  btn.onclick = () => {
+    const idx = pendingTextFiles.findIndex(f => f.name === name && f.content === content);
+    if (idx !== -1) pendingTextFiles.splice(idx, 1);
+    item.remove();
+    checkPreviewVisible();
+  };
+
+  item.appendChild(icon);
+  item.appendChild(label);
+  item.appendChild(btn);
+  previewStrip.appendChild(item);
+  previewStrip.style.display = 'flex';
+}
+
+async function handleFiles(files) {
+  for (const file of files) {
+    if (file.type.startsWith('image/')) {
+      const dataUrl = await fileToDataUrl(file);
+      addImageToPreview(dataUrl, file);
+    } else {
+      // Try to read as text (code/text files)
+      try {
+        const content = await file.text();
+        const lang = extToLang(file.name);
+        addTextFileToPreview(file.name, content, lang);
+      } catch (e) {
+        console.warn('Cannot read file as text:', file.name, e);
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+//  Send message
+// ─────────────────────────────────────────────
+async function sendMessage() {
+  const text = userInput.value.trim();
+  const images = [...pendingImages];
+  const textFiles = [...pendingTextFiles];
+
+  if (!text && images.length === 0 && textFiles.length === 0) return;
+  if (!session) return;
+
+  // Clear input
+  userInput.value = '';
+  userInput.style.height = 'auto';
+  userInput.disabled = true;
+  sendBtn.disabled   = true;
+
+  // Clear preview
+  pendingImages = [];
+  pendingTextFiles = [];
+  previewStrip.innerHTML = '';
+  previewStrip.style.display = 'none';
+
+  // Build display text for user bubble
+  let displayText = text;
+  if (textFiles.length > 0) {
+    const fileNames = textFiles.map(f => `📄 ${f.name}`).join('  ');
+    displayText = (text ? text + '\n' : '') + fileNames;
+  }
+  addMessage('user', displayText || '（画像を送信）', images.map(i => i.dataUrl));
+
+  addTypingIndicator();
+
+  try {
+    let promptParts;
+
+    if (supportsImages && images.length > 0) {
+      // Chrome 147 multimodal format with images
+      const contentParts = [];
+      for (const img of images) {
+        contentParts.push({ type: 'image', value: dataUrlToBlob(img.dataUrl) });
+      }
+      // Append text files as text content
+      let combinedText = text || '';
+      for (const tf of textFiles) {
+        combinedText += `\n\n--- ファイル: ${tf.name} ---\n\`\`\`${tf.lang}\n${tf.content}\n\`\`\``;
+      }
+      contentParts.push({ type: 'text', value: combinedText || 'この画像について説明してください。' });
+      promptParts = [{ role: 'user', content: contentParts }];
+    } else if (textFiles.length > 0) {
+      // Text files only: embed file contents into the prompt
+      let combined = text ? text + '\n\n' : '';
+      for (const tf of textFiles) {
+        combined += `--- ファイル: ${tf.name} ---\n\`\`\`${tf.lang}\n${tf.content}\n\`\`\`\n\n`;
+      }
+      if (!text) combined += 'このコードについて説明してください。';
+      promptParts = combined;
+    } else {
+      promptParts = text;
+    }
+
+    if (typeof session.promptStreaming === 'function') {
+      const stream = await session.promptStreaming(promptParts);
+      removeTypingIndicator();
+
+      const aiBubble = addMessage('ai', '');
+      let fullText = '';
+
+      for await (const chunk of stream) {
+        fullText += chunk;
+        aiBubble.innerHTML = formatMessage(fullText);
+        scrollToBottom();
+      }
+    } else {
+      const response = await session.prompt(promptParts);
+      removeTypingIndicator();
+      addMessage('ai', response);
+    }
+
+  } catch (err) {
+    removeTypingIndicator();
+    console.error(err);
+    addMessage('ai', `⚠️ エラーが発生しました：\n\`${escapeHtml(err.message)}\``);
+  } finally {
+    userInput.disabled = false;
+    sendBtn.disabled   = false;
+    userInput.focus();
+  }
+}
+
+// ─────────────────────────────────────────────
+//  Event listeners
+// ─────────────────────────────────────────────
+
+// Attach button – open combined file picker (images + code files)
+attachBtn.addEventListener('click', () => {
+  // Use a single combined input
+  const combined = document.createElement('input');
+  combined.type = 'file';
+  combined.multiple = true;
+  combined.accept = 'image/*,.txt,.md,.py,.js,.ts,.jsx,.tsx,.html,.css,.json,.yaml,.yml,.xml,.csv,.java,.c,.cpp,.h,.hpp,.cs,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt,.dart,.vue,.svelte';
+  combined.onchange = () => { handleFiles(combined.files); };
+  combined.click();
+});
+
+// File input change (legacy, kept for safety)
+fileInput.addEventListener('change', () => {
+  handleFiles(fileInput.files);
+  fileInput.value = '';
+});
+
+// Drag & drop
+document.addEventListener('dragover', e => {
+  e.preventDefault();
+  document.body.classList.add('drag-over');
+});
+document.addEventListener('dragleave', e => {
+  if (!e.relatedTarget) document.body.classList.remove('drag-over');
+});
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  document.body.classList.remove('drag-over');
+  if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+});
+
+// Paste image
+document.addEventListener('paste', e => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  const imageItems = [...items].filter(i => i.type.startsWith('image/'));
+  if (imageItems.length > 0) {
+    e.preventDefault();
+    handleFiles(imageItems.map(i => i.getAsFile()));
+  }
+});
+
+// Textarea auto-resize
+userInput.addEventListener('input', () => {
+  userInput.style.height = 'auto';
+  userInput.style.height = Math.min(userInput.scrollHeight, 160) + 'px';
+});
+
+// Enter to send
+userInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+sendBtn.addEventListener('click', sendMessage);
+
+// ─────────────────────────────────────────────
+//  Reset session (free memory)
+// ─────────────────────────────────────────────
+const resetBtn = document.getElementById('reset-btn');
+
+resetBtn.addEventListener('mouseover', () => {
+  resetBtn.style.background = 'var(--border)';
+  resetBtn.style.color = 'var(--text)';
+});
+resetBtn.addEventListener('mouseout', () => {
+  resetBtn.style.background = 'var(--surface2)';
+  resetBtn.style.color = 'var(--text-muted)';
+});
+
+async function resetSession() {
+  if (!session) return;
+
+  // Destroy old session to free GPU/RAM
+  try { session.destroy(); } catch (_) {}
+  session = null;
+
+  // Clear chat UI
+  chatContainer.innerHTML = '';
+
+  // Disable input while recreating
+  userInput.disabled = true;
+  sendBtn.disabled = true;
+  setStatus('checking', 'リセット中…');
+
+  // Recreate session
+  try {
+    if (supportsImages) {
+      session = await LanguageModel.create({
+        systemPrompt: 'あなたは親切で知識豊富なアシスタントです。日本語で丁寧に回答してください。画像が添付された場合はその内容も踏まえて回答してください。',
+        expectedInputs: [{ type: 'image' }],
+      });
+    } else {
+      session = await LanguageModel.create({
+        systemPrompt: 'あなたは親切で知識豊富なアシスタントです。日本語で丁寧に回答してください。',
+      });
+    }
+    setStatus('ready', supportsImages ? 'Gemini Nano（画像対応）' : 'Gemini Nano 準備完了');
+    addMessage('ai', '🔄 会話をリセットしました。メモリを解放しました。\n\n新しい話題からどうぞ！');
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+    userInput.focus();
+  } catch (err) {
+    console.error(err);
+    setStatus('error', 'リセット失敗');
+    addMessage('ai', `⚠️ リセットに失敗しました：\n\`${escapeHtml(err.message)}\``);
+  }
+}
+
+resetBtn.addEventListener('click', resetSession);
+
+// ─────────────────────────────────────────────
+//  Boot
+// ─────────────────────────────────────────────
+initSession();
+</script>
+</body>
+</html>
