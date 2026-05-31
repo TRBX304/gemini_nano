@@ -264,6 +264,30 @@
     }
     .btn-primary:hover { opacity: .85; }
 
+    /* ── Copy button ── */
+    .message {
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute;
+      top: -10px;
+      opacity: 0;
+      transition: opacity 0.15s;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 4px 8px;
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .message.user .copy-btn { left: 0; }
+    .message.ai   .copy-btn { right: 0; }
+    .message:hover .copy-btn { opacity: 1; }
+    .copy-btn.copied { color: var(--success); }
+
     @media (max-width: 600px) {
       header { padding: 10px 16px; }
       #chat-container { padding: 16px; }
@@ -540,6 +564,22 @@ function addMessage(role, text, imageDataUrls = []) {
   const textNode = document.createElement('span');
   textNode.innerHTML = formatMessage(text);
   bubble.appendChild(textNode);
+
+  // コピーボタン
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'copy-btn';
+  copyBtn.textContent = '📋 コピー';
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(text).then(() => {
+      copyBtn.textContent = '✅ コピーした';
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = '📋 コピー';
+        copyBtn.classList.remove('copied');
+      }, 2000);
+    });
+  });
+  wrap.appendChild(copyBtn);
 
   wrap.appendChild(avatar);
   wrap.appendChild(bubble);
