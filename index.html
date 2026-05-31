@@ -270,7 +270,7 @@
     }
     .copy-btn {
       position: absolute;
-      top: -10px;
+      bottom: -28px;
       opacity: 0;
       transition: opacity 0.15s;
       background: var(--surface2);
@@ -283,8 +283,8 @@
       white-space: nowrap;
       user-select: none;
     }
-    .message.user .copy-btn { left: 0; }
-    .message.ai   .copy-btn { right: 0; }
+    .message.user .copy-btn { left: 50%; transform: translateX(-50%); }
+    .message.ai   .copy-btn { left: 50%; transform: translateX(-50%); }
     .message:hover .copy-btn { opacity: 1; }
     .copy-btn.copied { color: var(--success); }
 
